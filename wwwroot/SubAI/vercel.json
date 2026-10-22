@@ -3,15 +3,7 @@
   "framework": null,
   "functions": {
     "server.ts": {
-      "includeFiles": [
-        "config.json",
-        "shared/**",
-        "public/**",
-        "EndingNoteAI/**",
-        "LegacyAI/**",
-        "MediCodeAI/**",
-        "VFAAI/**"
-      ],
+      "includeFiles": "{config.json,shared/**,public/**,EndingNoteAI/**,LegacyAI/**,MediCodeAI/**,VFAAI/**}",
       "maxDuration": 60
     }
   }
