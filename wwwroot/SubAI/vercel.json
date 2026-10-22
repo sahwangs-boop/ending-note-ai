@@ -1,10 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
-  "functions": {
-    "server.ts": {
-      "includeFiles": "{config.json,shared/**,public/**,EndingNoteAI/**,LegacyAI/**,MediCodeAI/**,VFAAI/**}",
-      "maxDuration": 60
-    }
-  }
+  "framework": null
 }
