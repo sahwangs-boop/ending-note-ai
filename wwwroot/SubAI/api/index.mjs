@@ -15,11 +15,27 @@ if (!process.env.PUBLIC_ORIGINS) {
 
 const config = await loadConfig(root);
 const agents = await loadAgents(root, config.agentsDirectory);
+const vercelFetch = async (...args) => {
+  try {
+    return await fetch(...args);
+  } catch (firstError) {
+    const firstCode = firstError?.cause?.code || firstError?.code || firstError?.name || 'UNKNOWN';
+    console.error(`OpenAI transport retry: ${firstCode}`);
+    await new Promise(resolve => setTimeout(resolve, 250));
+    try {
+      return await fetch(...args);
+    } catch (secondError) {
+      const secondCode = secondError?.cause?.code || secondError?.code || secondError?.name || 'UNKNOWN';
+      console.error(`OpenAI transport failed: ${secondCode}`);
+      throw secondError;
+    }
+  }
+};
 const server = await createAgentServer({
   root,
   config,
   agents,
-  respond: createOpenAiClient(config)
+  respond: createOpenAiClient(config, vercelFetch)
 });
 
 // Vercel 요청을 기존 공통 Node 서버의 request 처리기로 전달합니다.
