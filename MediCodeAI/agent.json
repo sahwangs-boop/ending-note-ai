@@ -1,0 +1,7 @@
+{
+  "title": "MediCodeAI",
+  "description": "공통 LLM을 사용하는 확장용 대화 Agent",
+  "kind": "chat",
+  "handlerModule": "handler.mjs",
+  "enabled": true
+}

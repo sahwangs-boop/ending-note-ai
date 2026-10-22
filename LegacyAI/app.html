@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>상속증여AI · 계산 App</title>
+  <link rel="stylesheet" href="../public/chat.css">
+  <style>
+    .app-header { align-items: center; }
+    .identity { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .identity form { display: flex; align-items: center; gap: 8px; }
+    .identity input { width: min(230px, 52vw); }
+    .identity button.secondary { background: #fff; color: #146b59; }
+    .fixed-layout { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 24px 0 0; min-width: 0; border: 0; padding: 0; }
+    .fixed-layout .card { margin: 0; min-width: 0; }
+    .step-card { display: flex; flex-direction: column; gap: 12px; }
+    .step-number { display: inline-grid; place-items: center; width: 28px; height: 28px; margin-right: 8px; border-radius: 9px; background: #eaf5ee; color: #146b59; font-size: 13px; font-weight: 700; }
+    .step-card h2, .result-card h2 { display: flex; align-items: center; margin: 0; }
+    .step-card label { font-size: 14px; font-weight: 600; }
+    .amount-input { display: flex; align-items: center; gap: 8px; }
+    .amount-input input { width: 100%; font-variant-numeric: tabular-nums; }
+    .amount-input span { color: #677b74; white-space: nowrap; }
+    .tax-options { display: grid; gap: 10px; }
+    .tax-option { display: flex; align-items: center; gap: 8px; padding: 12px; border: 1px solid #dde6e1; border-radius: 10px; cursor: pointer; }
+    .tax-option:has(input:checked) { border-color: #146b59; background: #eef7f1; }
+    .tax-option input { accent-color: #146b59; }
+    .calculate-button { width: 100%; margin-top: auto; }
+    .result-card { grid-column: 1 / -1; }
+    .result-card dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+    .result-item { padding: 14px; border-radius: 12px; background: #f4f7f5; }
+    .result-item dt { color: #677b74; font-size: 13px; }
+    .result-item dd { margin: 8px 0 0; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .tax-total { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px; border-radius: 12px; background: #eaf5ee; }
+    .tax-total strong { color: #146b59; font-size: clamp(22px, 4vw, 32px); font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+    .form-message { min-height: 20px; margin: 0; color: #ac3636; font-size: 13px; }
+    fieldset { min-inline-size: 0; }
+    fieldset:disabled { opacity: .55; }
+    @media (max-width: 800px) { .fixed-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); } .result-card dl { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 560px) { .fixed-layout { grid-template-columns: 1fr; } .result-card { grid-column: auto; } .app-header { align-items: flex-start; flex-direction: column; } .result-card dl { grid-template-columns: 1fr 1fr; } }
+    /* VFAAI 기준 색상을 고정 계산 UI에도 적용합니다. */
+    :root { color: #171717; background: #fff; --accent: #1463dc; --line: #e4e4e4; --muted: #747474; }
+    body { background: #fff; }
+    .step-number { background: #f4f7ff; color: var(--accent); }
+    .tax-option { border-color: var(--line); }
+    .tax-option:has(input:checked) { border-color: var(--accent); background: #f4f7ff; }
+    .tax-option input { accent-color: var(--accent); }
+    .result-item { background: #f7f7f8; }
+    .tax-total { background: #f4f7ff; }
+    .tax-total strong { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <nav class="mode-switch" aria-label="화면 전환">
+    <a href="./index.html">AI 채팅</a>
+    <a href="./app.html" aria-current="page">웹 App</a>
+  </nav>
+  <main class="shell">
+    <header class="app-header">
+      <div><p class="eyebrow">상속증여AI</p><h1>세금 계산 App</h1></div>
+      <div class="identity">
+        <span id="account-label" class="muted">이메일 확인이 필요합니다.</span>
+        <form id="email-form">
+          <label class="sr-only" for="email">이메일</label>
+          <input id="email" type="email" maxlength="254" required autocomplete="email" placeholder="name@example.com">
+          <button type="submit">확인</button>
+        </form>
+        <button id="logout" class="secondary" type="button" hidden>사용자 변경</button>
+      </div>
+    </header>
+    <p class="muted">부동산·금융 자산과 세목을 입력한 뒤 계산하면 결과가 아래 고정 영역에 표시됩니다.</p>
+
+    <form id="calculator-form">
+      <fieldset id="calculator-fields" class="fixed-layout" disabled>
+        <section class="card step-card" aria-labelledby="real-estate-title">
+          <h2 id="real-estate-title"><span class="step-number">1</span>부동산 자산</h2>
+          <label for="real-estate">금액을 입력해 주세요.</label>
+          <div class="amount-input"><input id="real-estate" type="text" inputmode="decimal" autocomplete="off" value="0" maxlength="24"><span>만원</span></div>
+          <p id="real-estate-error" class="form-message" role="alert"></p>
+        </section>
+
+        <section class="card step-card" aria-labelledby="financial-title">
+          <h2 id="financial-title"><span class="step-number">2</span>금융 자산</h2>
+          <label for="financial">금액을 입력해 주세요.</label>
+          <div class="amount-input"><input id="financial" type="text" inputmode="decimal" autocomplete="off" value="0" maxlength="24"><span>만원</span></div>
+          <p id="financial-error" class="form-message" role="alert"></p>
+        </section>
+
+        <section class="card step-card" aria-labelledby="tax-type-title">
+          <h2 id="tax-type-title"><span class="step-number">3</span>계산할 세금</h2>
+          <div class="tax-options">
+            <label class="tax-option"><input type="radio" name="tax-type" value="상속세" checked>상속세</label>
+            <label class="tax-option"><input type="radio" name="tax-type" value="증여세">증여세</label>
+          </div>
+          <button class="calculate-button" type="submit">계산하기</button>
+        </section>
+
+        <section class="card result-card" aria-labelledby="result-title" aria-live="polite">
+          <h2 id="result-title">계산 결과</h2>
+          <p id="result-message" class="muted">이메일을 확인한 뒤 금액을 입력하고 계산해 주세요.</p>
+          <div id="result-details" hidden>
+            <dl>
+              <div class="result-item"><dt>부동산 자산</dt><dd id="result-real-estate"></dd></div>
+              <div class="result-item"><dt>금융 자산</dt><dd id="result-financial"></dd></div>
+              <div class="result-item"><dt>합산 자산</dt><dd id="result-total"></dd></div>
+              <div class="result-item"><dt>적용 세율</dt><dd id="result-rate"></dd></div>
+            </dl>
+            <div class="tax-total"><span id="result-tax-label"></span><strong id="result-tax"></strong></div>
+            <p class="muted">상속세는 합산 자산을 과세표준으로 가정해 10~50% 누진세율과 누진공제를 적용하고, 증여세는 합산 자산의 12%로 계산한 단순 시뮬레이션입니다. 공제·채무 등 실제 신고 계산 요소는 반영하지 않습니다.</p>
+          </div>
+        </section>
+      </fieldset>
+    </form>
+  </main>
+  <script>
+    "use strict";
+
+    const STORE_PREFIX = "legacyai.calculator.v1:";
+    const SESSION_EMAIL_KEY = "subai.session.email.v1";
+    const MAX_ASSET = 1_000_000_000_000_000;
+    const channel = typeof BroadcastChannel === "function" ? new BroadcastChannel("subai.session.v1") : null;
+    const byId = id => document.getElementById(id);
+    let email = "";
+    let messages = [];
+    let calculated = false;
+
+    function validEmail(value) {
+      return typeof value === "string" && value.length <= 254 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
+    }
+
+    function parseManwon(value) {
+      const match = /^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,4}))?$/.exec(value.trim());
+      if (!match) throw new Error("0 이상의 숫자를 입력해 주세요. 소수점은 최대 4자리까지 가능합니다.");
+      const [whole, decimal = ""] = value.trim().replace(/,/g, "").split(".");
+      const fractional = decimal.padEnd(4, "0");
+      const amount = BigInt(whole) * 10000n + BigInt(fractional || "0");
+      if (amount > BigInt(MAX_ASSET)) throw new Error("자산별 입력 한도는 1,000조 원입니다.");
+      return Number(amount);
+    }
+
+    function won(value) { return `${value.toLocaleString("ko-KR")}원`; }
+
+    function formatManwon(value) {
+      const amount = BigInt(value);
+      const whole = String(amount / 10000n);
+      const fraction = String(amount % 10000n).padStart(4, "0").replace(/0+$/, "");
+      return fraction ? `${whole}.${fraction}` : whole;
+    }
+
+    function selectedTaxType() {
+      return document.querySelector('input[name="tax-type"]:checked')?.value || "상속세";
+    }
+
+    function setTaxType(value) {
+      const option = document.querySelector(`input[name="tax-type"][value="${value}"]`);
+      if (option) option.checked = true;
+    }
+
+    function readSavedUser(value) {
+      const raw = localStorage.getItem(STORE_PREFIX + value);
+      if (!raw) return { realEstate: 0, financial: 0, taxType: "상속세", messages: [], calculated: false };
+      const saved = JSON.parse(raw);
+      const state = saved?.state;
+      const validAmount = amount => Number.isSafeInteger(amount) && amount >= 0 && amount <= MAX_ASSET;
+      if (!state || !validAmount(state.realEstate) || !validAmount(state.financial) ||
+          !["상속세", "증여세"].includes(state.taxType) || !Array.isArray(saved.messages)) {
+        throw new Error("저장된 계산 데이터 형식을 확인해 주세요.");
+      }
+      return {
+        realEstate: state.realEstate,
+        financial: state.financial,
+        taxType: state.taxType,
+        messages: saved.messages,
+        calculated: state.step === 4
+      };
+    }
+
+    function saveUser(isComplete) {
+      if (!email) return;
+      const realEstate = parseManwon(byId("real-estate").value);
+      const financial = parseManwon(byId("financial").value);
+      const taxType = selectedTaxType();
+      const result = isComplete ? calculate(realEstate, financial, taxType) : null;
+      const state = {
+        step: isComplete ? 4 : 3,
+        realEstate,
+        financial,
+        taxType,
+        result,
+        realEstateConfirmed: true,
+        financialConfirmed: true
+      };
+      localStorage.setItem(STORE_PREFIX + email, JSON.stringify({ state, messages }));
+      calculated = isComplete;
+      renderResult(result);
+    }
+
+    function calculate(realEstate, financial, taxType) {
+      const total = realEstate + financial;
+      const rate = taxType === "상속세"
+        ? (total <= 100_000_000 ? 10 : total <= 500_000_000 ? 20 : total <= 1_000_000_000 ? 30 : total <= 3_000_000_000 ? 40 : 50)
+        : 12;
+      const deduction = taxType === "상속세"
+        ? (rate === 10 ? 0 : rate === 20 ? 10_000_000 : rate === 30 ? 60_000_000 : rate === 40 ? 160_000_000 : 460_000_000)
+        : 0;
+      const numerator = BigInt(total) * BigInt(rate) - BigInt(deduction) * 100n;
+      const quotient = numerator / 100n;
+      const remainder = numerator % 100n;
+      const tax = Number(quotient + (remainder > 50n || (remainder === 50n && quotient % 2n === 1n) ? 1n : 0n));
+      return { taxType, realEstate, financial, total, rate, tax };
+    }
+
+    function renderResult(result) {
+      byId("result-details").hidden = !result;
+      byId("result-message").hidden = Boolean(result);
+      if (!result) {
+        byId("result-message").textContent = email ? "금액을 입력하고 계산해 주세요." : "이메일을 확인한 뒤 금액을 입력하고 계산해 주세요.";
+        return;
+      }
+      byId("result-real-estate").textContent = won(result.realEstate);
+      byId("result-financial").textContent = won(result.financial);
+      byId("result-total").textContent = won(result.total);
+      byId("result-rate").textContent = `${result.rate}%`;
+      byId("result-tax-label").textContent = `산출 ${result.taxType}`;
+      byId("result-tax").textContent = won(result.tax);
+      byId("result-message").textContent = "";
+    }
+
+    function showEmail(value, share = true) {
+      if (!validEmail(value) || value === email) return;
+      try {
+        const saved = readSavedUser(value);
+        email = value;
+        messages = saved.messages;
+        byId("real-estate").value = formatManwon(saved.realEstate);
+        byId("financial").value = formatManwon(saved.financial);
+        setTaxType(saved.taxType);
+        byId("calculator-fields").disabled = false;
+        byId("email").hidden = true;
+        byId("email-form").querySelector("button").hidden = true;
+        byId("account-label").textContent = value;
+        byId("logout").hidden = false;
+        try { sessionStorage.setItem(SESSION_EMAIL_KEY, value); } catch { /* 현재 탭에서만 이메일을 기억합니다. */ }
+        if (share) channel?.postMessage({ type: "email", email: value });
+        renderResult(saved.calculated ? calculate(saved.realEstate, saved.financial, saved.taxType) : null);
+      } catch (error) {
+        byId("result-message").textContent = error.message || "저장된 계산 데이터를 읽지 못했습니다.";
+      }
+    }
+
+    function clearEmail(share = true) {
+      try { sessionStorage.removeItem(SESSION_EMAIL_KEY); } catch { /* 저장소를 사용할 수 없어도 화면을 초기화합니다. */ }
+      if (share) channel?.postMessage({ type: "logout" });
+      email = "";
+      messages = [];
+      byId("calculator-fields").disabled = true;
+      byId("email").hidden = false;
+      byId("email-form").querySelector("button").hidden = false;
+      byId("email").value = "";
+      byId("account-label").textContent = "이메일 확인이 필요합니다.";
+      byId("logout").hidden = true;
+      renderResult(null);
+    }
+
+    function updateDraft() {
+      byId("real-estate-error").textContent = "";
+      byId("financial-error").textContent = "";
+      if (!email) return;
+      try { saveUser(false); }
+      catch {
+        calculated = false;
+        renderResult(null);
+      }
+    }
+
+    byId("email-form").onsubmit = event => {
+      event.preventDefault();
+      const value = byId("email").value.trim().toLowerCase();
+      if (!validEmail(value)) {
+        byId("result-message").textContent = "올바른 이메일 주소를 입력해 주세요.";
+        return;
+      }
+      showEmail(value);
+    };
+
+    byId("logout").onclick = () => clearEmail();
+    byId("calculator-form").onsubmit = event => {
+      event.preventDefault();
+      if (!email) return;
+      let valid = true;
+      for (const [inputId, errorId] of [["real-estate", "real-estate-error"], ["financial", "financial-error"]]) {
+        try { parseManwon(byId(inputId).value); byId(errorId).textContent = ""; }
+        catch (error) { byId(errorId).textContent = error.message; valid = false; }
+      }
+      if (!valid) return;
+      try { saveUser(true); }
+      catch (error) { byId("result-message").textContent = error.message || "계산 결과를 저장하지 못했습니다."; }
+    };
+
+    for (const id of ["real-estate", "financial"]) byId(id).addEventListener("input", updateDraft);
+    document.querySelectorAll('input[name="tax-type"]').forEach(input => input.addEventListener("change", updateDraft));
+
+    if (channel) channel.onmessage = event => {
+      const message = event.data;
+      if (message?.type === "request") {
+        try {
+          const saved = sessionStorage.getItem(SESSION_EMAIL_KEY);
+          if (validEmail(saved)) channel.postMessage({ type: "email", email: saved });
+        } catch { /* 저장된 이메일이 없으면 응답하지 않습니다. */ }
+      } else if (message?.type === "email" && validEmail(message.email)) {
+        try { sessionStorage.setItem(SESSION_EMAIL_KEY, message.email); } catch { /* 현재 탭에서만 기억합니다. */ }
+        showEmail(message.email, false);
+      } else if (message?.type === "logout") clearEmail(false);
+    };
+
+    try {
+      const rememberedEmail = sessionStorage.getItem(SESSION_EMAIL_KEY);
+      if (validEmail(rememberedEmail)) showEmail(rememberedEmail);
+      else channel?.postMessage({ type: "request" });
+    } catch { /* 이메일을 직접 입력받습니다. */ }
+    if (!email && channel) channel.postMessage({ type: "request" });
+  </script>
+</body>
+</html>

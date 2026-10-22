@@ -1,0 +1,7 @@
+{
+  "title": "VFAAI",
+  "description": "변액보험 펀드추천 서비스 신청과 변액보험 관련 상담",
+  "kind": "chat",
+  "handlerModule": "handler.mjs",
+  "enabled": true
+}

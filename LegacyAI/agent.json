@@ -1,0 +1,7 @@
+{
+  "title": "상속증여AI",
+  "description": "상속세·증여세 계산과 LLM 대화 및 입력 UI 제어",
+  "kind": "calculator",
+  "handlerModule": "handler.mjs",
+  "enabled": true
+}
