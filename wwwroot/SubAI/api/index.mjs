@@ -3,6 +3,7 @@ import { loadConfig } from '../shared/config.mjs';
 import { loadAgents } from '../shared/registry.mjs';
 import { createOpenAiClient } from '../shared/openai.mjs';
 import { createAgentServer } from '../shared/server.mjs';
+import { HttpError } from '../shared/errors.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
@@ -27,7 +28,7 @@ const vercelFetch = async (...args) => {
     } catch (secondError) {
       const secondCode = secondError?.cause?.code || secondError?.code || secondError?.name || 'UNKNOWN';
       console.error(`OpenAI transport failed: ${secondCode}`);
-      throw secondError;
+      throw new HttpError(502, `OpenAI 네트워크 연결 실패 (${secondCode}). Vercel Logs에서 같은 코드를 확인해 주세요.`);
     }
   }
 };
