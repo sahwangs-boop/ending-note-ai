@@ -1,4 +1,16 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null
+  "framework": null,
+  "functions": {
+    "api/index.mjs": {
+      "includeFiles": "{config.json,shared/**,public/**,EndingNoteAI/**,LegacyAI/**,MediCodeAI/**,VFAAI/**}",
+      "maxDuration": 60
+    }
+  },
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/api/index.mjs"
+    }
+  ]
 }
