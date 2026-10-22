@@ -1,0 +1,132 @@
+다음의 내용을 참조해서 기존 AI Agent를 수정하거나 신규 AI Agent를 생성해줘
+
+이 프로젝트는 .NET Core 8 웹사이트의 하위 폴더에서 동작하는 멀티 AI Agent 를 위한 프로젝트야.
+상위 웹사이트의 .NET 코드에 영향을 주지 않기 위해 node.js 를 기반으로 만들었고 IIS 에서 URL Rewrite 기능을 사용해서 하나의 웹사이트로 동작하게 만들었어
+/wwwroot/SubAI 폴더에는 모든 Agent에서 공통으로 사용되는 코드가 존재하고 각각의 AI Agent를 위한 전용 폴더가 존재해
+전용 폴더에는 해당 AI 에서 처리하는 UI 인터페이스(index.html)와 이를 컨트롤 하는 백엔드 코드(handler.mjs)가 존재해.
+백엔드 코드는 OPEN AI API KEY를 사용하여 UI 인터페이스를 제어하고 해당 도메인의 질문에 대해서 답변을 제공하며,
+의도분류를 통해서 해당 AI가 담당하는 도메인에 대한 질문이 아닐 경우는 별도의 처리기(main-ai.mjs)로 전달하여 메인 AI 가 답변을 하도록 해
+index.html에는 챗봇형태의 Agent 를 구현하고 app.html 에는 UI 인터페이스를 고정 배치하여 LLM 을 사용하지 않는 웹앱을 구현한 후 화면 상단의 'AI 채팅과 웹 App' 탭을 사용해서 서로 이동해
+
+가이드 AI 인 /SubAI/LegacyAI 의 소스를 참고하여 새로운 AI를 만들면 돼
+새로운 AI 만들때 공통코드인 /SubAI/shared 폴더는 수정하지 말고 AI전용폴더에만 코드를 생성하고,  /SubAI/public 폴더의 AI 목록페이지에는 신규 AI 를 추가해줘
+
+
+# 새 AI Agent 추가 작업 지침
+
+이 프로젝트는 기존 .NET 8 웹사이트의 `wwwroot` 아래에 배포하는 멀티 AI Agent 시스템입니다. 
+.NET 소스와 기존 사이트 설정은 변경하지 말고, 새 Agent는 아래 공통 Node.js 프로젝트 안에 추가하세요.
+
+## 프로젝트 기준 경로와 구조
+
+- 프로젝트 루트: `wwwroot/SubAI`
+- Agent 폴더: `wwwroot/SubAI/<AgentId>`
+- 공통 서버·OpenAI 연결·검증: `wwwroot/SubAI/shared`
+- 공통 웹 화면·정적 파일: `wwwroot/SubAI/public`
+- 테스트: `wwwroot/SubAI/tests`
+
+가이드 Agent(LegacyAI)의 파일과 동작은 요청 범위가 아닌 한 수정하지 마세요. 신규 Agent의 코드는 신규 Agent 폴더에 두고, 특히  `shared`폴더에 있는 코드는 수정하지 마세요.
+`shared` 폴더의 수정이 필요하면 관리자에게 변경요청하세요.
+Agent별 도메인 지침, 의도분류, UI 명령 및 위임 처리는 반드시 해당 Agent 폴더에서 관리하세요.
+
+## 신규 Agent 생성 절차
+
+1. `wwwroot/SubAI/<AgentId>` 폴더를 만드세요. `AgentId`는 영문자로 시작하고 영문자·숫자·밑줄·하이픈만 사용하며 1~50자여야 합니다. 예: `ClaimsAI`.
+2. 다음 파일을 만드세요.
+
+   ```text
+   <AgentId>/
+     agent.json
+     instructions.md
+     index.html
+     app.html
+     handler.mjs
+     main-ai.mjs
+   ```
+
+3. `agent.json`은 다음 필드를 포함하세요.
+
+   ```json
+   {
+     "title": "화면에 표시할 이름",
+     "description": "Agent의 담당 업무 설명",
+     "kind": "chat",
+     "handlerModule": "handler.mjs",
+     "enabled": true
+   }
+   ```
+
+   `kind`는 `chat` 또는 `calculator`입니다. Agent 등록기는 `wwwroot/SubAI/config.json`의 `agentsDirectory`에서 폴더를 자동 검색하므로 공통 등록 코드를 하드코딩하지 마세요. `handlerModule`은 Agent 폴더 안의 `.mjs` 파일명만 지정할 수 있습니다.
+
+4. `instructions.md`에 담당 도메인과 허용·제외 범위, 답변 언어·안전 규칙을 구체적으로 작성하세요. 의도분류는 이 지침을 기준으로 동작합니다. 담당 범위 밖 질문에는 직접 답하지 말고 `delegate_to_main`으로 분류하도록 명시하세요.
+5. `handler.mjs`는 다음 서버 처리기 계약을 구현하고 이름이 지정된 `handleChat`을 내보내세요.
+
+   ```js
+   export async function handleChat(agent, input, respond, signal) {
+     // 입력 검증 및 Agent 전용 의도분류·업무 처리를 수행합니다.
+   }
+   ```
+
+   일반 채팅 Agent는 `shared/intent.mjs`의 `classifyAndRespond(agent, input, respond, signal)`를 사용하세요. 반환된 `intent`가 `in_scope`이면 `{ message: decision.message }`를 반환하고, `delegate_to_main`이면 아래의 Agent 전용 위임 함수를 호출해 그 결과를 `{ message: ... }`로 반환하세요. Agent별 응답 형식이나 UI 동작이 다르면 기존 Agent 구현을 복사해 이름만 바꾸지 말고 해당 계약과 검증을 명확히 정의하세요.
+
+   ```js
+   import { classifyAndRespond } from '../shared/intent.mjs';
+   import { answerWithMainAI } from './main-ai.mjs';
+
+   export async function handleChat(agent, input, respond, signal) {
+     const decision = await classifyAndRespond(agent, input, respond, signal);
+     if (decision.intent === 'delegate_to_main') {
+       return { message: await answerWithMainAI({ agent, ...decision.request, signal }) };
+     }
+     return { message: decision.message };
+   }
+   ```
+
+6. `main-ai.mjs`에는 나중에 실제 메인 AI 연결을 추가할 Agent별 함수 지점을 둡니다. 현재 더미 단계에서는 다음과 같이 반환하세요.
+
+   ```js
+   export async function answerWithMainAI(_context) {
+     return '메인AI가 대신 답변합니다.';
+   }
+   ```
+
+   실제 메인 AI 연결은 사용자가 요청하기 전까지 추가하지 마세요. 범위 밖 요청의 질문과 대화 이력을 전달해야 한다면 `classifyAndRespond`가 반환한 정제된 `decision.request`만 사용하세요. 이메일, 원본 요청 전체, API 키 등 불필요하거나 민감한 정보는 전달하지 마세요.
+
+## UI 및 응답 규약
+
+- 채팅 응답은 서버에서 `{ "message": "한국어 답변" }` 형식으로 반환해야 합니다.
+- 새 화면은 Agent 폴더의 `index.html`에 구현하세요. 간단한 채팅 화면은 공통 `../_shared/chat.js`와 `../_shared/chat.css`를 사용할 수 있습니다.
+- 계산기나 사용자 정의 UI는 `index.html`의 요청 본문, `handler.mjs`의 입력 검증·응답 구조, 브라우저 렌더링 코드가 서로 일치하도록 구현하세요. LLM이 UI를 직접 조작한다고 가정하지 말고, LLM의 구조화된 명령을 서버와 화면에서 각각 검증·적용하세요.
+- 서버는 Agent 화면과 공통 정적 파일만 명시적으로 허용합니다. 임의의 파일은 자동으로 브라우저에 제공되지 않습니다. 별도 JS/CSS/이미지가 필요하면 공개 파일 허용 목록, `web.config` 차단 규칙, 정적 파일 접근 테스트를 함께 검토하세요. `handler.mjs`, `main-ai.mjs`, `instructions.md`, `agent.json`, `.env` 및 기타 서버 설정은 웹에 공개하지 마세요.
+
+## 공통 설정·보안 규칙
+
+- 모든 Agent는 `shared`의 OpenAI 클라이언트와 같은 모델·API 키 설정을 공유합니다. Agent별 API 키나 별도 Node 서버를 추가하지 마세요.
+- API 키는 서버 환경변수 또는 웹 루트 밖의 보호된 설정 파일로 관리하세요. 실제 비밀값이 든 `.env`를 웹 루트에 배포하거나 소스·프런트엔드·로그에 기록하지 마세요.
+- 사용자가 보낸 값을 검증하고 필요한 필드만 OpenAI에 전달하세요. 이메일, 임의 추가 필드, 비밀 설정은 모델 입력에 포함하지 마세요.
+- OpenAI 오류 원문이나 키가 브라우저 응답·로그에 노출되지 않게 하세요. 허용된 명령만 검증 후 실행하고, 구조가 잘못된 모델 응답은 안전한 오류로 처리하세요.
+- UI 페이지 경로는 `/SubAI/<AgentId>/`, 채팅 API 경로는 `/SubAI/<AgentId>/api/chat`입니다.
+
+## 배포·실행 전제
+
+Node.js 서버는 .NET 프로세스와 별도로 실행됩니다. `run.ps1`은 수동 실행 스크립트이며, 실행만으로 IIS가 Node를 자동 시작하거나 상시 운영하도록 구성되지는 않습니다. 운영에서는 Node.js 22.18 이상과 승인된 프로세스 관리자/Windows 서비스 등 재시작 가능한 실행 방법을 준비하세요.
+
+IIS 경로 연결에는 URL Rewrite와 ARR가 필요하며 ARR의 `Enable Proxy`도 IIS 서버 설정에서 활성화되어야 합니다. 이 서버 설정은 Agent 폴더만 업로드하거나 하위 `web.config`만 수정해서 대체할 수 없습니다. 배포 전 운영 도메인에 맞는 `PUBLIC_ORIGINS`와 서버 포트·경로 설정을 확인하세요.
+
+## 완료 전 검증
+
+프로젝트 루트 `wwwroot/SubAI`에서 다음을 실행하세요.
+
+```powershell
+npm test
+```
+
+테스트에는 최소한 다음을 포함하세요.
+
+- Agent 자동 등록, 비활성화 및 `handlerModule` 누락·오류 검증
+- 담당 범위 질문의 정상 처리와 범위 밖 질문의 Agent 전용 메인 AI 더미 함수 분기
+- 잘못된 요청·LLM 구조화 응답 거부, API 키와 이메일 비노출
+- 신규 화면·API 응답 형식 및 서버 소스/설정 파일 직접 접근 차단
+- 새 계산/UI 명령을 추가했다면 정상 흐름, 금액·입력 검증, 오류·취소 시 상태 보존
+
+실제 OpenAI API 호출 테스트는 사용량 비용이 발생하므로 사용자가 요청한 경우에만 실행하세요. 마지막에 새로 만든 파일, 담당 범위 및 테스트 결과를 한국어로 요약하세요.

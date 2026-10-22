@@ -1,0 +1,67 @@
+상속증여AI / SubAI 서버 배포 안내
+================================
+
+이 문서는 VueLauncher 기반 .NET 사이트의 하위 경로 /SubAI 에 Node.js Agent 서버를 배포할 때 필요한 설정을 정리합니다.
+
+1. 배포 폴더
+------------
+
+- SubAI 프로젝트 전체를 사이트의 wwwroot\SubAI 폴더에 배포합니다.
+- 예: D:\WebServer\vue.ifa.co.kr\wwwroot\SubAI
+- Node.js가 IIS 서버에 설치되어 있어야 합니다.
+- SubAI 서버는 기본적으로 127.0.0.1:5188 에서 실행됩니다. 포트 5188이 다른 프로세스에서 사용 중이지 않은지 확인합니다.
+
+2. IIS 부모 사이트 설정
+----------------------
+
+- IIS 사이트의 실제 루트 경로를 먼저 확인합니다. 예: D:\WebServer\vue.ifa.co.kr
+- 프록시 규칙은 사이트 루트의 web.config에 추가합니다. 예: D:\WebServer\vue.ifa.co.kr\web.config
+- D:\WebServer\vue.ifa.co.kr\wwwroot\web.config가 아니라 D:\WebServer\vue.ifa.co.kr\web.config를 수정해야 합니다.
+- 기존 ASP.NET Core의 <handlers>, <aspNetCore>, <location> 설정은 삭제하거나 덮어쓰지 않습니다.
+- 이미 <rewrite><rules>가 있으면 해당 rules 안에 아래 규칙을 SPA fallback 규칙보다 앞에 추가합니다. rewrite 규칙이 없다면 사이트 루트의 활성 <system.webServer> 설정 안에 추가합니다.
+
+  <rewrite>
+    <rules>
+      <rule name="SubAI Node reverse proxy" stopProcessing="true">
+        <match url="^SubAI(?:/(.*))?$" />
+        <action type="Rewrite" url="http://127.0.0.1:5188/SubAI/{R:1}" appendQueryString="true" />
+      </rule>
+      <!-- 기존 SPA fallback 규칙은 이 아래에 둡니다. -->
+    </rules>
+  </rewrite>
+
+- wwwroot\web.config에는 부모 사이트용 Node 프록시 규칙을 두지 않습니다.
+- IIS에서 SubAI 폴더를 애플리케이션으로 만들고 실제 경로를 사이트의 wwwroot\SubAI로 지정합니다.
+- IIS 서버 노드에서 Application Request Routing Cache > Server Proxy Settings를 열어 Enable Proxy가 체크되어 있는지 확인하고, 아니면 체크 후 Apply를 누릅니다.
+- URL Rewrite 모듈과 ARR이 설치되어 있어야 합니다.
+
+3. Node 서버 설정
+-----------------
+
+- wwwroot\SubAI\config.json의 publicOrigins 배열에 실제 접속 도메인의 출처(origin)를 추가합니다.
+- 도메인에는 프로토콜을 포함하되 경로, 포트(기본 HTTPS 443인 경우), 끝의 슬래시는 넣지 않습니다.
+
+  "publicOrigins": [
+    "https://vue.ifa.co.kr"
+  ]
+
+- 여러 운영 도메인을 사용할 경우 각각 별도 항목으로 추가합니다.
+- 서버 환경변수 PUBLIC_ORIGINS 또는 SubAI 폴더의 .env에 같은 항목이 설정되어 있으면 config.json보다 우선 적용됩니다. 실제 적용값을 확인하고 한 곳에서 관리합니다.
+- OPENAI_API_KEY와 필요한 OPENAI_MODEL 설정도 서버 환경변수 또는 .env에 지정합니다. API 키가 포함된 .env는 공개 웹 폴더에 두지 말고, 웹 루트 밖에 보관한 뒤 SUBAI_ENV_FILE 환경변수로 경로를 지정하는 것을 권장합니다.
+
+4. Node 서버 시작 또는 재시작
+----------------------------
+
+- 설정을 변경한 뒤 wwwroot\SubAI\run.ps1을 재실행합니다. 스크립트는 현재 폴더의 server.mjs를 실행하고 설정을 시작 시 읽습니다.
+- run.ps1은 기존 Node 프로세스를 자동으로 종료하지 않습니다. 재시작 전에 서비스 관리자 등으로 기존 SubAI 서버 프로세스를 정상 종료한 뒤 다시 시작합니다.
+- 포트 사용 중 오류가 나면 5188 포트를 점유한 프로세스를 확인합니다. 관련 없는 프로세스를 강제 종료하지 않습니다.
+- 운영 중에는 Node 프로세스가 계속 실행되도록 서비스 관리자나 운영 환경의 프로세스 관리 방식을 사용합니다.
+
+5. 배포 후 확인
+---------------
+
+- IIS 서버에서 http://127.0.0.1:5188/SubAI/api/agents 를 호출해 JSON이 반환되는지 확인합니다.
+- 외부에서 https://vue.ifa.co.kr/SubAI/api/agents 를 호출해 JSON이 반환되는지 확인합니다.
+- https://vue.ifa.co.kr/SubAI/ 에 접속해 화면, CSS, JavaScript가 정상적으로 로드되는지 확인하고 실제 질문을 보내 응답을 확인합니다.
+- 채팅 요청이 403이면 publicOrigins에 브라우저 주소의 origin이 정확히 포함되어 있는지 확인하고 Node 서버를 재시작합니다.
+- 502이면 Node 서버 실행 여부, 127.0.0.1:5188 연결, ARR 프록시 활성화와 부모 사이트 루트의 프록시 규칙을 확인합니다.

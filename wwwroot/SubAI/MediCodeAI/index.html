@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MediCodeAI · 대화</title>
+  <link rel="stylesheet" href="../public/chat.css">
+  <script type="module" src="../public/chat.js"></script>
+</head>
+<body>
+  <nav class="mode-switch" aria-label="화면 전환">
+    <a href="./index.html" aria-current="page">AI 채팅</a>
+    <a href="./app.html">웹 App</a>
+  </nav>
+  <main class="shell">
+    <header><div><p class="eyebrow">공통 AI 대화 서비스</p><h1 id="title">MediCodeAI</h1></div><a href="../">Agent 목록</a></header>
+    <p id="description">공통 LLM을 사용하는 확장용 대화 Agent입니다.</p>
+    <section id="login-panel" class="card">
+      <h2>대화를 시작해 볼까요?</h2>
+      <form id="login-form">
+        <label for="email">이메일</label>
+        <input id="email" type="email" autocomplete="email" maxlength="254" required placeholder="name@example.com">
+        <button type="submit" disabled>확인</button>
+      </form>
+      <p class="muted">이메일은 사용자 구분용이며 인증을 대신하지 않습니다. 대화는 이 브라우저에 Agent별로 저장됩니다.</p>
+    </section>
+    <section id="chat-panel" hidden>
+      <div class="account"><span id="account"></span><button id="switch-user" type="button">사용자 변경</button></div>
+      <div id="messages" aria-label="대화 내용" aria-live="polite"></div>
+      <form id="chat-form" class="composer">
+        <label class="sr-only" for="question">질문</label>
+        <input id="question" maxlength="500" required autocomplete="off" placeholder="질문을 입력해 주세요.">
+        <button type="submit">전송</button>
+      </form>
+    </section>
+    <p id="status" role="status" aria-live="polite"></p>
+    <p class="muted">RAG 및 전용 업무 도구가 연결되지 않은 기본 대화 화면입니다. 중요한 답변은 별도로 확인해 주세요.</p>
+  </main>
+</body>
+</html>
