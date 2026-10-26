@@ -54,19 +54,43 @@ export async function consultRemote({ agent, question, history, planSummary, res
 }
 
 export function consultFallback(question) {
-  const knowledge = selectKnowledge(question, 4);
-  const facts = knowledge.flatMap(item => item.facts).slice(0, 5);
-  const introduction = /엔딩\s*노트|엔딩노트/.test(question)
-    ? '엔딩노트는 본인의 삶과 마지막 희망을 미리 정리해, 가족이 장례·재산·사후 행정 과정에서 당황하거나 다투지 않도록 돕는 기록입니다.'
-    : '현재 AI 연결이 원활하지 않아 검증된 엔딩노트 기본 자료를 바탕으로 안내드립니다.';
+  const normalized = question.replace(/\s+/g, ' ').trim();
+  const knowledge = selectKnowledge(normalized, 3);
+  let answer;
+  let nextQuestion = '장례 준비, 유언·재산, 사후 정리, 남기는 마음 중 어떤 항목부터 정리할까요?';
+
+  if (/엔딩\s*노트|엔딩노트/.test(normalized) && /(무엇|뭐|의미|설명|알려)/.test(normalized)) {
+    answer = `엔딩노트는 내가 살아온 이야기와 마지막 순간에 바라는 점을 미리 정리해 두는 생활 기록입니다.
+
+장례 방식, 의료·돌봄 의향, 유언과 재산, 사후 행정, 가족에게 남길 말 등을 한곳에 적어 두면 가족이 갑작스러운 상황에서 내 뜻을 확인하는 데 도움이 됩니다.
+
+다만 엔딩노트 자체가 법적 유언장을 대신하는 것은 아닙니다. 법적 효력이 필요한 재산 배분이나 의료 결정은 별도의 법정 서식과 전문가 확인이 필요합니다.`;
+  } else if (/장례|빈소|조문|화장|매장|장지|수목장|봉안/.test(normalized)) {
+    answer = '장례 준비는 장례 형식과 규모, 알릴 사람의 범위, 화장·매장 방식, 장지, 사진·음악·꽃처럼 가족이 대신 결정하기 어려운 항목부터 정리하면 좋습니다. 아직 결정하지 못한 항목은 미정으로 남겨 두고 나중에 바꿀 수 있습니다.';
+    nextQuestion = '장례 규모부터 정할까요, 아니면 화장·매장과 장지부터 살펴볼까요?';
+  } else if (/유언|상속|재산|수익자|유증/.test(normalized)) {
+    answer = '유언·재산 항목에는 보유 재산의 종류, 누구에게 어떤 뜻으로 남기고 싶은지, 집행을 맡길 사람과 특별한 당부를 정리할 수 있습니다. 엔딩노트의 내용은 준비용 초안이므로 법적 효력이 필요하면 민법상 유언 방식과 최신 세무 기준을 별도로 확인해야 합니다.';
+    nextQuestion = '재산 목록부터 정리할까요, 아니면 남기고 싶은 사람과 뜻부터 적어볼까요?';
+  } else if (/사후|계정|구독|디지털|휴대폰|온라인/.test(normalized)) {
+    answer = '사후 정리에는 온라인 계정의 삭제·추모 전환, 정기 구독 해지, 휴대전화와 컴퓨터 처리, 각종 행정 절차를 맡길 사람을 기록할 수 있습니다. 비밀번호나 인증번호는 엔딩노트에 직접 적지 말고 별도의 안전한 보관 수단을 이용하세요.';
+    nextQuestion = '온라인 계정, 구독 서비스, 행정 업무 중 무엇부터 정리할까요?';
+  } else if (/가족|메시지|편지|남길 말|마음/.test(normalized)) {
+    answer = '남기는 마음에는 가족이나 지인에게 전하고 싶은 감사, 사과, 당부와 기억해 주었으면 하는 이야기를 자유롭게 적을 수 있습니다. 완성된 문장일 필요는 없고, 사람별로 짧은 메모부터 시작해도 됩니다.';
+    nextQuestion = '누구에게 어떤 마음을 가장 먼저 남기고 싶으신가요?';
+  } else {
+    const facts = knowledge.flatMap(item => item.facts).slice(0, 3);
+    answer = facts.length
+      ? `질문과 관련해 먼저 확인할 핵심 내용입니다.\n\n${facts.map(fact => `• ${fact}`).join('\n')}`
+      : '엔딩노트에서는 삶의 기록, 장례 준비, 유언·재산, 사후 정리와 가족에게 남길 마음을 차례로 정리할 수 있습니다. 아직 정하지 못한 내용은 미정으로 두고 언제든 수정할 수 있습니다.';
+  }
   return {
     schemaVersion: 'ending-note-consultation.r2',
     intent: 'INFORMATION',
-    answer: `${introduction}\n\n${facts.map(fact => `• ${fact}`).join('\n')}\n\n웹 App에서 내용을 직접 작성하거나 아래 선택 항목으로 계속 진행할 수 있습니다.`,
+    answer,
     citations: knowledge.map(item => item.id),
     notices: ['현재 원격 AI 연결이 원활하지 않아 기본 안내 모드로 답변했습니다.', '비용·법률·세무·의료 정보는 실제 실행 전에 최신 기관 또는 전문가 확인이 필요합니다.'],
     planCandidates: [],
-    nextQuestion: '장례 준비, 유언·재산, 사후 정리, 남기는 마음 중 어떤 항목부터 정리할까요?',
+    nextQuestion,
     offerToSave: false,
     requiresConfirmation: false
   };
