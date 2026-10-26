@@ -1,9 +1,21 @@
 import { HttpError } from './errors.mjs';
 
+function diagnosticValue(value, maxLength = 120) {
+  if (typeof value !== 'string' || !value || value.length > maxLength || !/^[A-Za-z0-9_.:/-]+$/.test(value)) return null;
+  return value;
+}
+
+function writeDiagnostic(logger, level, event, fields) {
+  const output = Object.fromEntries(Object.entries({ event, ...fields }).filter(([, value]) => value !== undefined));
+  logger?.[level]?.(JSON.stringify(output));
+}
+
 // 키, 모델, 통신 정책은 모든 Agent에서 이 클라이언트 하나를 공유합니다.
-export function createOpenAiClient(config, fetchImpl = fetch) {
+export function createOpenAiClient(config, fetchImpl = fetch, logger = console) {
   return async function respond(payload, signal) {
     if (!config.apiKey) throw new HttpError(503, '서버 폴더의 .env 또는 OPENAI_API_KEY 환경변수를 설정하고 재시작해 주세요.');
+    const model = diagnosticValue(config.model);
+    writeDiagnostic(logger, 'info', 'openai_request_start', { model, apiKeyConfigured: true });
     const timeout = AbortSignal.timeout(config.requestTimeoutMs);
     const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
     try {
@@ -15,8 +27,20 @@ export function createOpenAiClient(config, fetchImpl = fetch) {
         redirect: 'error'
       });
       if (!response.ok) {
-        // 공급자 오류 본문이나 API 키를 브라우저 및 로그에 노출하지 않습니다.
-        await response.body?.cancel();
+        // 공급자 오류에서 허용된 구조화 필드만 추출하며 메시지와 응답 본문은 기록하지 않습니다.
+        let providerError = {};
+        try {
+          const body = await response.json();
+          if (body?.error && typeof body.error === 'object') providerError = body.error;
+        } catch { await response.body?.cancel(); }
+        writeDiagnostic(logger, 'error', 'openai_response_error', {
+          model,
+          status: response.status,
+          errorType: diagnosticValue(providerError.type),
+          errorCode: diagnosticValue(providerError.code),
+          errorParam: diagnosticValue(providerError.param),
+          requestId: diagnosticValue(response.headers.get('x-request-id'))
+        });
         const message = [401, 403].includes(response.status)
           ? 'OpenAI API 키 또는 모델 접근 권한을 확인해 주세요.'
           : [400, 404].includes(response.status)
@@ -33,6 +57,11 @@ export function createOpenAiClient(config, fetchImpl = fetch) {
       return result;
     } catch (error) {
       if (error instanceof HttpError) throw error;
+      writeDiagnostic(logger, 'error', 'openai_transport_error', {
+        model,
+        errorName: diagnosticValue(error?.name),
+        causeCode: diagnosticValue(error?.cause?.code || error?.code)
+      });
       if (timeout.aborted) throw new HttpError(504, '응답 시간이 초과되었습니다. 다시 시도해 주세요.');
       if (signal?.aborted) throw new HttpError(499, '요청이 취소되었습니다.');
       throw new HttpError(502, 'OpenAI 통신 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');

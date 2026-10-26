@@ -141,6 +141,44 @@ test('OpenAI 공통 클라이언트는 모델과 비밀 키를 서버에서만 �
   }
 });
 
+test('OpenAI 진단 로그는 상태와 허용 필드만 남기고 비밀정보와 본문을 제외한다', async () => {
+  const logs = [];
+  const logger = {
+    info: value => logs.push(value),
+    error: value => logs.push(value)
+  };
+  const response = Response.json({
+    error: {
+      type: 'invalid_request_error',
+      code: 'model_not_found',
+      param: 'model',
+      message: 'sensitive-provider-message'
+    }
+  }, { status: 404, headers: { 'x-request-id': 'req_diagnostic_123' } });
+  const client = createOpenAiClient(config, async () => response, logger);
+  await assert.rejects(client({ input: 'sensitive-user-question' }), { status: 502 });
+
+  const events = logs.map(value => JSON.parse(value));
+  assert.deepEqual(events[0], {
+    event: 'openai_request_start',
+    model: 'test-model',
+    apiKeyConfigured: true
+  });
+  assert.deepEqual(events[1], {
+    event: 'openai_response_error',
+    model: 'test-model',
+    status: 404,
+    errorType: 'invalid_request_error',
+    errorCode: 'model_not_found',
+    errorParam: 'model',
+    requestId: 'req_diagnostic_123'
+  });
+  const serialized = logs.join('\n');
+  for (const forbidden of ['test-key', 'Bearer', 'sensitive-user-question', 'sensitive-provider-message']) {
+    assert.equal(serialized.includes(forbidden), false, forbidden);
+  }
+});
+
 test('OpenAI 시간 초과는 504로 반환한다', async () => {
   const client = createOpenAiClient({ ...config, requestTimeoutMs: 20 }, async (_url, options) => new Promise((resolve, reject) => {
     options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
