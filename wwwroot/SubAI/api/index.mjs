@@ -16,17 +16,22 @@ if (!process.env.PUBLIC_ORIGINS) {
 
 const config = await loadConfig(root);
 const agents = await loadAgents(root, config.agentsDirectory);
+const transportDetail = error => {
+  const code = error?.cause?.code || error?.code || error?.name || 'UNKNOWN';
+  const message = String(error?.cause?.message || error?.message || '').replace(/[\r\n]/g, ' ').slice(0, 160);
+  return `${code}${message ? `: ${message}` : ''}`;
+};
 const vercelFetch = async (...args) => {
   try {
     return await fetch(...args);
   } catch (firstError) {
-    const firstCode = firstError?.cause?.code || firstError?.code || firstError?.name || 'UNKNOWN';
+    const firstCode = transportDetail(firstError);
     console.error(`OpenAI transport retry: ${firstCode}`);
     await new Promise(resolve => setTimeout(resolve, 250));
     try {
       return await fetch(...args);
     } catch (secondError) {
-      const secondCode = secondError?.cause?.code || secondError?.code || secondError?.name || 'UNKNOWN';
+      const secondCode = transportDetail(secondError);
       console.error(`OpenAI transport failed: ${secondCode}`);
       throw new HttpError(502, `OpenAI 네트워크 연결 실패 (${secondCode}). Vercel Logs에서 같은 코드를 확인해 주세요.`);
     }

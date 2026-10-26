@@ -8,7 +8,7 @@ import {
 } from './domain.mjs';
 import { answerWithMainAI } from './main-ai.mjs';
 import { extractRemote } from './llm-adapter.mjs';
-import { consultRemote } from './r2-adapter.mjs';
+import { consultFallback, consultRemote } from './r2-adapter.mjs';
 import { validatePlanSummary } from './r2-schema.mjs';
 import { applyConversationGuide, funeralGuidanceForStep, resolveGuidedChoice } from './r3-conversation-guide.mjs';
 
@@ -34,9 +34,16 @@ export async function handleChat(agent, input, respond, signal) {
     const chat = validateChat(input);
     if (typeof input.documentId !== 'string' || !/^mock-doc-[a-z0-9-]{6,}$/i.test(input.documentId)) throw new HttpError(400, '문서 ID 형식을 확인해 주세요.');
     const planSummary = validatePlanSummary(input.planSummary);
-    const result = await consultRemote({ agent, question: chat.question, history: chat.history, planSummary, respond, signal });
+    let result;
+    try {
+      result = await consultRemote({ agent, question: chat.question, history: chat.history, planSummary, respond, signal });
+    } catch (error) {
+      if (!(error instanceof HttpError) || error.status < 500) throw error;
+      console.error(`EndingNoteAI remote fallback: ${error.status} ${error.message}`);
+      result = { data: consultFallback(chat.question), metrics: { latencyMs: null, inputTokens: null, outputTokens: null, totalTokens: null } };
+    }
     const guided = applyConversationGuide({ question: chat.question, planSummary, response: result.data });
-    return { action: 'consultation_reply', mode: 'REMOTE', documentId: input.documentId, ...guided, metrics: result.metrics };
+    return { action: 'consultation_reply', mode: result.metrics.latencyMs === null ? 'FALLBACK' : 'REMOTE', documentId: input.documentId, ...guided, metrics: result.metrics };
   }
 
   if (input.action === 'guided_choice') {

@@ -53,3 +53,22 @@ export async function consultRemote({ agent, question, history, planSummary, res
   };
 }
 
+export function consultFallback(question) {
+  const knowledge = selectKnowledge(question, 4);
+  const facts = knowledge.flatMap(item => item.facts).slice(0, 5);
+  const introduction = /엔딩\s*노트|엔딩노트/.test(question)
+    ? '엔딩노트는 본인의 삶과 마지막 희망을 미리 정리해, 가족이 장례·재산·사후 행정 과정에서 당황하거나 다투지 않도록 돕는 기록입니다.'
+    : '현재 AI 연결이 원활하지 않아 검증된 엔딩노트 기본 자료를 바탕으로 안내드립니다.';
+  return {
+    schemaVersion: 'ending-note-consultation.r2',
+    intent: 'INFORMATION',
+    answer: `${introduction}\n\n${facts.map(fact => `• ${fact}`).join('\n')}\n\n웹 App에서 내용을 직접 작성하거나 아래 선택 항목으로 계속 진행할 수 있습니다.`,
+    citations: knowledge.map(item => item.id),
+    notices: ['현재 원격 AI 연결이 원활하지 않아 기본 안내 모드로 답변했습니다.', '비용·법률·세무·의료 정보는 실제 실행 전에 최신 기관 또는 전문가 확인이 필요합니다.'],
+    planCandidates: [],
+    nextQuestion: '장례 준비, 유언·재산, 사후 정리, 남기는 마음 중 어떤 항목부터 정리할까요?',
+    offerToSave: false,
+    requiresConfirmation: false
+  };
+}
+
